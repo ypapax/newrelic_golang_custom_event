@@ -1,25 +1,53 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"time"
 
-	nr "github.com/newrelic/go-agent"
+	"github.com/newrelic/go-agent"
 )
 
-func main() {
-	log.SetFlags(log.Llongfile | log.LstdFlags)
-	license := os.Getenv("NEWRELIC_LICENSE_KEY")
-	log.Println(license)
-	config := nr.NewConfig("my-golang-app", license)
-	app, err := nr.NewApplication(config)
-	if err != nil {
-		log.Fatalf("%+v", err)
+func mustGetEnv(key string) string {
+	if val := os.Getenv(key); "" != val {
+		return val
 	}
-	if err := app.RecordCustomEvent("my_type", map[string]interface{}{"hello": "world"}); err != nil {
-		log.Fatalf("%+v", err)
+	panic(fmt.Sprintf("environment variable %s unset", key))
+}
+
+func main() {
+	cfg := newrelic.NewConfig("my-golang-app", mustGetEnv("NEWRELIC_LICENSE_KEY"))
+	cfg.Logger = newrelic.NewDebugLogger(os.Stdout)
+	app, err := newrelic.NewApplication(cfg)
+	if nil != err {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	// Wait for the application to connect.
+	if err := app.WaitForConnection(5 * time.Second); nil != err {
+		fmt.Println(err)
+	}
+
+	// Do the tasks at hand.  Perhaps record them using transactions and/or
+	// custom events.
+	tasks := []string{"white", "black", "red", "blue", "green", "yellow"}
+	for _, task := range tasks {
+		txn := app.StartTransaction("task", nil, nil)
+		time.Sleep(10 * time.Millisecond)
+		if err := txn.End(); err != nil {
+			panic(err)
+		}
+		if err := app.RecordCustomEvent("task", map[string]interface{}{
+			"color": task,
+		}); err != nil {
+			panic(err)
+		}
 	}
 	log.Println("ok")
-	time.Sleep(time.Hour)
+	// Shut down the application to flush data to New Relic.
+	app.Shutdown(10 * time.Second)
+	log.Println("good")
+
 }
