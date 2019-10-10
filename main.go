@@ -43,7 +43,7 @@ func main() {
 		}
 		for i := 0; i <= 1000; i++ {
 			if err := app.RecordCustomMetric("my_metric", float64(rand.Intn(1000))); err != nil {
-				log.Printf("%+v", err)
+				panic(fmt.Errorf("%+v", err))
 			}
 		}
 	}
